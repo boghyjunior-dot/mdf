@@ -20,7 +20,12 @@ export function BoardPicker() {
     const card = cardFromRankSuit(rank, suit)
     if (isBoardCardTaken(state.board, activeSlot, card)) return
     dispatch({ type: 'SET_BOARD_CARD', index: activeSlot, card })
-    setActiveSlot(null)
+
+    if (activeSlot < 2) {
+      setActiveSlot(activeSlot + 1)
+    } else {
+      setActiveSlot(null)
+    }
   }
 
   const removeFromSlot = (index: number) => {

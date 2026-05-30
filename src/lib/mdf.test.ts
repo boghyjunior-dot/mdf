@@ -1,16 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { ALL_CELLS, TOTAL_DECK_COMBOS } from './matrix'
-import { getEligibleCombos, isCellExcluded } from './filters'
+import { getFullComboCount, isCellLocked, isComboLocked } from './filters'
 import {
   formatComboLabel,
   getCellComboStats,
   getComboDisposition,
   getComboGridLayout,
-  getCombosForPaintFrequency,
   getDerivedCellState,
   isComboFolded,
 } from './combos'
-import { computeFoldStats, getTargetFoldPct, getDeltaColor } from './mdf'
+import { computeFoldStats, getTargetFoldPct, getDeltaColor, computeMdfFoldPct, computeBetPctOfPot } from './mdf'
 import { cellKey, type RankIndex, type SuitId } from '../types/poker'
 
 describe('matrix', () => {
@@ -44,25 +43,34 @@ describe('combos', () => {
     expect(getComboDisposition('h', 'fold', new Set(), new Set())).toBe('fold')
   })
 
+  it('skips locked combos on whole-cell fold', () => {
+    const locked = new Set<SuitId>(['s'])
+    expect(getComboDisposition('s', 'fold', new Set(), new Set(), locked)).toBe('in')
+    expect(getComboDisposition('h', 'fold', new Set(), new Set(), locked)).toBe('fold')
+  })
+
   it('lays out combo grids by hand type', () => {
     expect(getComboGridLayout(aks, new Set())).toMatchObject({ columns: 2, rows: 2 })
     expect(getComboGridLayout(aa, new Set())).toMatchObject({ columns: 3, rows: 2 })
     const ako = ALL_CELLS.find((c) => c.label === 'AKo')!
     expect(getComboGridLayout(ako, new Set())).toMatchObject({ columns: 4, rows: 3 })
   })
-
-  it('selects paint frequency combos', () => {
-    expect(getCombosForPaintFrequency(aks, new Set(), 100)).toHaveLength(4)
-    expect(getCombosForPaintFrequency(aks, new Set(), 50)).toHaveLength(2)
-    expect(getCombosForPaintFrequency(aks, new Set(), 25)).toHaveLength(1)
-  })
 })
 
 describe('mdf', () => {
-  const noFilters = { excludePairs: false, onlyFlushDraw: false, onlyStraightDraw: false, onlyGutshot: false }
-
   it('returns correct target for b50', () => {
     expect(getTargetFoldPct('b50')).toBe(33)
+  })
+
+  it('computes custom target from pot and bet', () => {
+    expect(getTargetFoldPct('b50', '50', '100')).toBeCloseTo(33.33, 1)
+    expect(computeMdfFoldPct(50, 100)).toBeCloseTo(33.33, 1)
+    expect(computeBetPctOfPot(75, 100)).toBe(75)
+  })
+
+  it('falls back to preset when custom sizes are incomplete', () => {
+    expect(getTargetFoldPct('b100', '50', '')).toBe(50)
+    expect(getTargetFoldPct('b100', '', '100')).toBe(50)
   })
 
   it('computes fold percentage from combo weights', () => {
@@ -72,16 +80,7 @@ describe('mdf', () => {
       [cellKey(aa.row, aa.col)]: 'fold' as const,
       [cellKey(kk.row, kk.col)]: 'call' as const,
     }
-    const stats = computeFoldStats(
-      cellStates,
-      {},
-      {},
-      {},
-      new Set(),
-      noFilters,
-      new Set(),
-      'b50',
-    )
+    const stats = computeFoldStats(cellStates, {}, {}, {}, 'b50')
 
     expect(stats.folded).toBe(6)
     expect(stats.defended).toBe(6)
@@ -89,23 +88,7 @@ describe('mdf', () => {
     expect(stats.currentPct).toBe(50)
   })
 
-  it('counts only painted range combos at partial frequency', () => {
-    const aks = ALL_CELLS.find((c) => c.label === 'AKs')!
-    const key = cellKey(aks.row, aks.col)
-    const stats = computeFoldStats(
-      { [key]: 'in' },
-      {},
-      {},
-      { [key]: getCombosForPaintFrequency(aks, new Set(), 50) },
-      new Set(),
-      noFilters,
-      new Set(),
-      'b50',
-    )
-    expect(stats.total).toBe(2)
-  })
-
-  it('counts per-combo suit folds', () => {
+  it('counts per-combo folds regardless of suit locks', () => {
     const aks = ALL_CELLS.find((c) => c.label === 'AKs')!
     const cellStates = {
       [cellKey(aks.row, aks.col)]: 'in' as const,
@@ -115,13 +98,31 @@ describe('mdf', () => {
       { [cellKey(aks.row, aks.col)]: ['s'] },
       {},
       {},
-      new Set(),
-      noFilters,
-      new Set(),
       'b50',
     )
     expect(stats.folded).toBe(1)
     expect(stats.untagged).toBe(3)
+    expect(stats.total).toBe(4)
+  })
+
+  it('excludes locked combos from whole-cell fold in MDF stats', () => {
+    const aks = ALL_CELLS.find((c) => c.label === 'AKs')!
+    const cellStates = {
+      [cellKey(aks.row, aks.col)]: 'fold' as const,
+    }
+    const stats = computeFoldStats(
+      cellStates,
+      {},
+      {},
+      {},
+      'b50',
+      [],
+      '',
+      '',
+      new Set(['s']),
+    )
+    expect(stats.folded).toBe(3)
+    expect(stats.untagged).toBe(1)
     expect(stats.total).toBe(4)
   })
 
@@ -135,14 +136,33 @@ describe('mdf', () => {
 describe('filters', () => {
   const cell = ALL_CELLS.find((c) => c.label === 'AKs')!
   const aa = ALL_CELLS.find((c) => c.label === 'AA')!
-  const noFilters = { excludePairs: false, onlyFlushDraw: false, onlyStraightDraw: false, onlyGutshot: false }
 
-  it('excludes by rank', () => {
-    expect(isCellExcluded(cell, new Set<RankIndex>([0]), noFilters, new Set(), [])).toBe(true)
+  it('locks cells by rank without removing them from range math', () => {
+    expect(isCellLocked(cell, new Set<RankIndex>([0]))).toBe(true)
+    const stats = computeFoldStats(
+      { [cellKey(cell.row, cell.col)]: 'in' },
+      {},
+      {},
+      {},
+      'b50',
+    )
+    expect(stats.total).toBe(4)
   })
 
-  it('reduces combo counts when suits are excluded', () => {
-    expect(getEligibleCombos(cell, new Set<SuitId>(['s']))).toBe(3)
-    expect(getEligibleCombos(aa, new Set<SuitId>(['s']))).toBe(3)
+  it('locks pocket pairs when pairs lock is on', () => {
+    const aa = ALL_CELLS.find((c) => c.label === 'AA')!
+    expect(isCellLocked(aa, new Set(), true)).toBe(true)
+    expect(isCellLocked(cell, new Set(), true)).toBe(false)
+  })
+
+  it('locks combos by suit', () => {
+    expect(isComboLocked('s', new Set<SuitId>(['s']))).toBe(true)
+    expect(isComboLocked('s-h', new Set<SuitId>(['s']))).toBe(true)
+    expect(isComboLocked('h-d', new Set<SuitId>(['s']))).toBe(false)
+  })
+
+  it('reports full combo counts per hand type', () => {
+    expect(getFullComboCount(cell)).toBe(4)
+    expect(getFullComboCount(aa)).toBe(6)
   })
 })

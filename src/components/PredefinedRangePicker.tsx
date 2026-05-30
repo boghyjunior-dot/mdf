@@ -20,10 +20,10 @@ export function PredefinedRangePicker() {
       >
         <option value="">Load preset range…</option>
         {categories.map((category) => (
-          <optgroup key={category} label={category}>
+          <optgroup key={category} label={category.replace('MTT · 40BB · ', '')}>
             {PREDEFINED_RANGES.filter((range) => range.category === category).map((range) => (
               <option key={range.id} value={range.id} title={range.description}>
-                {range.label}
+                {category.replace('MTT · 40BB · ', '')} {range.label}
               </option>
             ))}
           </optgroup>

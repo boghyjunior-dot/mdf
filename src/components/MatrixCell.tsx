@@ -11,7 +11,7 @@ const stateStyles: Record<DerivedCellState | 'out', string> = {
 interface MatrixCellProps {
   label: string
   state: DerivedCellState | 'out'
-  excluded: boolean
+  locked?: boolean
   partial?: boolean
   selected?: boolean
   onPointerDown: () => void
@@ -22,7 +22,7 @@ interface MatrixCellProps {
 export function MatrixCell({
   label,
   state,
-  excluded,
+  locked = false,
   partial = false,
   selected = false,
   onPointerDown,
@@ -32,6 +32,8 @@ export function MatrixCell({
   return (
     <button
       type="button"
+      disabled={locked}
+      title={locked ? 'Locked — unlock from header' : undefined}
       onPointerDown={(e) => {
         e.preventDefault()
         onPointerDown()
@@ -45,19 +47,18 @@ export function MatrixCell({
         border rounded-sm
         select-none touch-none
         transition-colors
-        hover:brightness-110
         ${stateStyles[state]}
-        ${excluded ? 'opacity-40 line-through' : partial ? 'opacity-70' : ''}
+        ${locked ? 'cursor-not-allowed brightness-50' : 'hover:brightness-110'}
+        ${partial && !locked ? 'opacity-90' : ''}
         ${selected ? 'ring-2 ring-white ring-offset-1 ring-offset-slate-900' : ''}
       `}
     >
-      {(excluded || partial) && (
+      {partial && !locked && (
         <span
           className="absolute inset-0 rounded-sm pointer-events-none"
           style={{
-            background: excluded
-              ? 'repeating-linear-gradient(-45deg, transparent, transparent 3px, rgba(0,0,0,0.25) 3px, rgba(0,0,0,0.25) 6px)'
-              : 'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(0,0,0,0.12) 4px, rgba(0,0,0,0.12) 8px)',
+            background:
+              'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgba(0,0,0,0.12) 4px, rgba(0,0,0,0.12) 8px)',
           }}
         />
       )}

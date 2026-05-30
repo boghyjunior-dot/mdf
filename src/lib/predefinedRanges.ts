@@ -11,6 +11,37 @@ export interface PredefinedRange {
 
 const LABEL_TO_CELL = new Map(ALL_CELLS.map((cell) => [cell.label, cell]))
 
+/** All suited — BB defends every suited combo vs any open at 40 BB MTT (BBZ). */
+const ALL_SUITED = [
+  'A2s+',
+  'K2s+',
+  'Q2s+',
+  'J2s+',
+  'T2s+',
+  '92s+',
+  '82s+',
+  '72s+',
+  '62s+',
+  '52s+',
+  '42s+',
+  '32s',
+] as const
+
+/** BB offsuit horizontal bar + all stronger offsuit (no interior triangle gaps). */
+function bbOffsuitBarTokens(barRank: Rank): string[] {
+  const barIdx = rankIndex(barRank)
+  const tokens: string[] = ['A2o+']
+  for (let h = 1; h < barIdx; h++) {
+    tokens.push(`${RANKS[h]}${RANKS[barIdx]}o+`)
+  }
+  return tokens
+}
+
+const BB_OFFSUIT_9X = bbOffsuitBarTokens('9')
+const BB_OFFSUIT_7X = bbOffsuitBarTokens('7')
+const BB_OFFSUIT_6X = bbOffsuitBarTokens('6')
+const BB_OFFSUIT_5X = bbOffsuitBarTokens('5')
+
 function rankIndex(rank: string): RankIndex {
   const idx = RANKS.indexOf(rank as Rank)
   if (idx < 0) throw new Error(`Invalid rank: ${rank}`)
@@ -108,155 +139,124 @@ export function countRangeCombos(cellStates: Record<string, CellState>): number 
 }
 
 export const PREDEFINED_RANGES: PredefinedRange[] = [
+  // 8-max MTT · 40 BB · 1 BB ante · 2.2x open — continue vs RFI (call + 3-bet).
+  // BB: BBZ all suited + Rule of 5-6-7. IP: tighter flats, more 3-bet/fold at this depth.
   {
-    id: 'utg-open',
-    label: 'UTG open',
-    category: 'Open raise',
-    description: 'Tight ~15% UTG open range',
-    tokens: ['77+', 'ATs+', 'KQs', 'KJs', 'QJs', 'JTs', 'T9s', '98s', 'AKo', 'AQo', 'AJo', 'KQo'],
+    id: '40bb-hj-vs-utg',
+    label: 'vs UTG',
+    category: 'MTT · 40BB · HJ',
+    description: 'HJ continue vs UTG open — pairs, suited broadways, AK/AQ',
+    tokens: ['88+', 'AJs+', 'KQs', 'QJs', 'JTs', 'T9s', '98s', 'AKo', 'AQo'],
   },
   {
-    id: 'hj-open',
-    label: 'HJ open',
-    category: 'Open raise',
-    description: 'Typical ~18% hijack open',
-    tokens: ['66+', 'A9s+', 'K9s+', 'Q9s+', 'J9s+', 'T8s+', '98s', '87s', '76s', 'AKo', 'AQo', 'AJo', 'ATo', 'KQo', 'KJo'],
+    id: '40bb-co-vs-utg',
+    label: 'vs UTG',
+    category: 'MTT · 40BB · CO',
+    description: 'CO continue vs UTG open — value + suited connectors',
+    tokens: ['77+', 'ATs+', 'KJs+', 'QJs', 'JTs', 'T9s', '98s', '87s', 'AKo', 'AQo', 'AJo'],
   },
   {
-    id: 'co-open',
-    label: 'CO open',
-    category: 'Open raise',
-    description: 'Typical ~28% cutoff open',
+    id: '40bb-co-vs-hj',
+    label: 'vs HJ',
+    category: 'MTT · 40BB · CO',
+    description: 'CO continue vs hijack open — 3-bet heavy, selective flats',
+    tokens: ['66+', 'A9s+', 'A5s', 'KTs+', 'QJs', 'JTs', 'T9s', '98s', '87s', '76s', 'AJo+', 'KQo'],
+  },
+  {
+    id: '40bb-btn-vs-utg',
+    label: 'vs UTG',
+    category: 'MTT · 40BB · BTN',
+    description: 'BTN continue vs UTG open',
+    tokens: ['66+', 'AJs+', 'KQs', 'QJs', 'JTs', 'T9s', '98s', '87s', 'AKo', 'AQo', 'AJo', 'KQo'],
+  },
+  {
+    id: '40bb-btn-vs-hj',
+    label: 'vs HJ',
+    category: 'MTT · 40BB · BTN',
+    description: 'BTN continue vs hijack open',
     tokens: [
-      '55+', 'A2s+', 'K5s+', 'Q8s+', 'J8s+', 'T7s+', '96s+', '85s+', '75s', '65s', '54s',
-      'AKo', 'AQo', 'AJo', 'ATo', 'A9o', 'KQo', 'KJo', 'KTo', 'QJo', 'QTo',
+      '55+', 'A9s+', 'A5s', 'A4s', 'KTs+', 'QJs', 'JTs', 'T9s', '98s', '87s', '76s',
+      'AJo+', 'KJo+', 'QJo', 'KQo',
     ],
   },
   {
-    id: 'btn-open',
-    label: 'BTN open',
-    category: 'Open raise',
-    description: 'Wide ~45% button open',
+    id: '40bb-btn-vs-co',
+    label: 'vs CO',
+    category: 'MTT · 40BB · BTN',
+    description: 'BTN continue vs cutoff open — wide BTN defense',
     tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J4s+', 'T6s+', '95s+', '84s+', '74s+', '64s+', '53s+', '43s',
-      'A2o+', 'K5o+', 'Q8o+', 'J8o+', 'T8o+', '98o',
+      '44+', 'A2s+', 'K8s+', 'Q9s+', 'J9s+', 'T8s+', '98s', '87s', '76s', '65s', '54s',
+      'A9o+', 'KJo+', 'QJo', 'QTo', 'JTo', 'KQo',
     ],
   },
   {
-    id: 'sb-open',
-    label: 'SB open',
-    category: 'Open raise',
-    description: 'Wide ~50% small blind open',
+    id: '40bb-sb-vs-utg',
+    label: 'vs UTG',
+    category: 'MTT · 40BB · SB',
+    description: 'SB continue vs UTG — mostly 3-bet, tight flats',
+    tokens: ['99+', 'AJs+', 'KQs', 'QJs', 'JTs', 'AKo', 'AQo'],
+  },
+  {
+    id: '40bb-sb-vs-hj',
+    label: 'vs HJ',
+    category: 'MTT · 40BB · SB',
+    description: 'SB continue vs hijack open',
+    tokens: ['88+', 'ATs+', 'KJs+', 'QJs', 'JTs', 'T9s', '98s', 'AKo', 'AQo', 'AJo'],
+  },
+  {
+    id: '40bb-sb-vs-co',
+    label: 'vs CO',
+    category: 'MTT · 40BB · SB',
+    description: 'SB continue vs cutoff — suited 8x floor',
     tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J2s+', 'T4s+', '94s+', '84s+', '73s+', '63s+', '53s+', '43s',
-      'A2o+', 'K2o+', 'Q4o+', 'J7o+', 'T7o+', '97o+', '87o',
+      '66+', 'A8s+', 'A5s', 'K9s+', 'Q9s+', 'J9s+', 'T8s+', '98s', '87s', '76s',
+      'ATo+', 'KJo+', 'QJo', 'KQo',
     ],
   },
   {
-    id: 'bb-vs-btn',
-    label: 'BB vs BTN',
-    category: 'Defend',
-    description: 'BB defend vs button open ~50%',
+    id: '40bb-sb-vs-btn',
+    label: 'vs BTN',
+    category: 'MTT · 40BB · SB',
+    description: 'SB continue vs button — suited 7x, wide vs steal',
     tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J2s+', 'T2s+', '92s+', '82s+', '72s+', '62s+', '52s+', '42s+', '32s',
-      'A2o+', 'K2o+', 'Q2o+', 'J4o+', 'T6o+', '96o+', '86o+', '76o', '65o', '54o',
+      '22+', 'A2s+', 'K7s+', 'Q8s+', 'J8s+', 'T7s+', '97s+', '87s', '76s', '65s', '54s', '43s',
+      'A4o+', 'K9o+', 'Q9o+', 'J9o+', 'T9o', '98o',
     ],
   },
   {
-    id: 'bb-vs-co',
-    label: 'BB vs CO',
-    category: 'Defend',
-    description: 'BB defend vs cutoff open ~38%',
-    tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q4s+', 'J6s+', 'T6s+', '95s+', '85s+', '75s+', '64s+', '54s', '43s',
-      'A2o+', 'K5o+', 'Q8o+', 'J8o+', 'T8o+', '98o', '87o',
-    ],
+    id: '40bb-bb-vs-utg',
+    label: 'vs UTG',
+    category: 'MTT · 40BB · BB',
+    description: 'BB defend vs UTG — all suited, offsuit 9x bar',
+    tokens: ['22+', ...ALL_SUITED, ...BB_OFFSUIT_9X],
   },
   {
-    id: 'bb-vs-sb',
-    label: 'BB vs SB',
-    category: 'Defend',
-    description: 'BB defend vs small blind open ~55%',
-    tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J2s+', 'T2s+', '92s+', '82s+', '72s+', '62s+', '52s+', '42s+', '32s',
-      'A2o+', 'K2o+', 'Q2o+', 'J2o+', 'T4o+', '94o+', '84o+', '74o+', '64o+', '54o',
-    ],
+    id: '40bb-bb-vs-hj',
+    label: 'vs HJ',
+    category: 'MTT · 40BB · BB',
+    description: 'BB defend vs hijack — all suited, offsuit 7x bar',
+    tokens: ['22+', ...ALL_SUITED, ...BB_OFFSUIT_7X],
   },
   {
-    id: 'top-10',
-    label: 'Top 10%',
-    category: 'Study',
-    description: 'Strong ~10% range for MDF drills',
-    tokens: ['88+', 'A9s+', 'A5s', 'KTs+', 'QTs+', 'JTs', 'T9s', '98s', 'AKo', 'AQo', 'AJo', 'KQo'],
+    id: '40bb-bb-vs-co',
+    label: 'vs CO',
+    category: 'MTT · 40BB · BB',
+    description: 'BB defend vs cutoff — all suited, offsuit 6x bar',
+    tokens: ['22+', ...ALL_SUITED, ...BB_OFFSUIT_6X],
   },
   {
-    id: 'top-20',
-    label: 'Top 20%',
-    category: 'Study',
-    description: 'Strong ~20% range for MDF drills',
-    tokens: ['66+', 'A2s+', 'K9s+', 'Q9s+', 'J9s+', 'T8s+', '98s', '87s', '76s', 'AKo', 'AQo', 'AJo', 'ATo', 'KQo', 'KJo'],
+    id: '40bb-bb-vs-btn',
+    label: 'vs BTN',
+    category: 'MTT · 40BB · BB',
+    description: 'BB defend vs button — all suited, offsuit 5x bar',
+    tokens: ['22+', ...ALL_SUITED, ...BB_OFFSUIT_5X],
   },
   {
-    id: 'top-30',
-    label: 'Top 30%',
-    category: 'Study',
-    description: 'Top ~30% of hands by combo weight',
-    tokens: [
-      '55+', 'A2s+', 'K7s+', 'Q8s+', 'J9s+', 'T8s+', '98s', '87s', '76s', '65s', '54s',
-      'AKo', 'AQo', 'AJo', 'ATo', 'A9o', 'A8o', 'A7o', 'KQo', 'KJo', 'KTo', 'K9o',
-      'QJo', 'QTo', 'Q9o', 'JTo', 'J9o', 'T9o', '98o',
-    ],
-  },
-  {
-    id: 'top-40',
-    label: 'Top 40%',
-    category: 'Study',
-    description: 'Top ~40% of hands by combo weight',
-    tokens: [
-      '33+', 'A2s+', 'K5s+', 'Q7s+', 'J7s+', 'T6s+', '96s+', '85s+', '75s', '65s', '54s', '43s',
-      'AKo', 'AQo', 'AJo', 'ATo', 'A9o', 'A8o', 'A7o', 'A6o', 'KQo', 'KJo', 'KTo', 'K9o', 'K8o',
-      'QJo', 'QTo', 'Q9o', 'Q8o', 'JTo', 'J9o', 'J8o', 'T9o', 'T8o', '98o', '87o',
-    ],
-  },
-  {
-    id: 'top-50',
-    label: 'Top 50%',
-    category: 'Study',
-    description: 'Top ~50% of hands by combo weight',
-    tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J4s+', 'T6s+', '95s+', '84s+', '74s+', '64s+', '53s+',
-      'A2o+', 'K5o+', 'Q8o+', 'J8o+', 'T8o+',
-    ],
-  },
-  {
-    id: 'top-60',
-    label: 'Top 60%',
-    category: 'Study',
-    description: 'Top ~60% of hands by combo weight',
-    tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q3s+', 'J5s+', 'T5s+', '94s+', '84s+', '73s+', '63s+', '53s+', '43s', '32s',
-      'A2o+', 'K6o+', 'Q7o+', 'J8o+', 'T8o+', '97o+', '86o+', '75o+', '64o+', '54o', '43o',
-    ],
-  },
-  {
-    id: 'top-70',
-    label: 'Top 70%',
-    category: 'Study',
-    description: 'Top ~70% of hands by combo weight',
-    tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J3s+', 'T4s+', '94s+', '84s+', '73s+', '63s+', '53s+', '43s',
-      'A2o+', 'K3o+', 'Q5o+', 'J6o+', 'T7o+', '96o+', '85o+', '74o+', '64o+', '54o',
-    ],
-  },
-  {
-    id: 'top-80',
-    label: 'Top 80%',
-    category: 'Study',
-    description: 'Top ~80% of hands by combo weight',
-    tokens: [
-      '22+', 'A2s+', 'K2s+', 'Q2s+', 'J3s+', 'T3s+', '93s+', '83s+', '73s+', '63s+', '53s+', '43s', '32s',
-      'A2o+', 'K2o+', 'Q4o+', 'J5o+', 'T6o+', '95o+', '84o+', '73o+', '63o+', '53o+', '43o',
-    ],
+    id: '40bb-bb-vs-sb',
+    label: 'vs SB',
+    category: 'MTT · 40BB · BB',
+    description: 'BB defend vs SB open — all suited, offsuit 5x bar',
+    tokens: ['22+', ...ALL_SUITED, ...BB_OFFSUIT_5X],
   },
 ]
 

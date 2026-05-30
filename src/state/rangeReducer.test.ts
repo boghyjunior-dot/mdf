@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { rangeReducer, initialState, saveState, loadState, type AppState } from './rangeReducer'
 import { cellKey } from '../types/poker'
 import { ALL_CELLS } from '../lib/matrix'
-import { getComboDisposition } from '../lib/combos'
+import { getComboDisposition, getCombosInRange } from '../lib/combos'
+import { computeFoldStats } from '../lib/mdf'
 
 describe('rangeReducer combo dispositions', () => {
   const aks = ALL_CELLS.find((c) => c.label === 'AKs')!
@@ -73,6 +74,68 @@ describe('rangeReducer combo dispositions', () => {
     expect(state.foldedCombos[key]).toEqual(['s'])
     expect(state.calledCombos[key]?.sort()).toEqual(['c', 'd', 'h'])
     expect(nextComboCall(state, key)).toBe('fold')
+  })
+
+  it('keeps call when clicking call mode again on the same hand', () => {
+    let state: AppState = withAksInRange()
+    state = rangeReducer(state, { type: 'SET_MODE', mode: 'call' })
+    state = rangeReducer(state, { type: 'SET_CELL', row: aks.row, col: aks.col })
+    state = rangeReducer(state, { type: 'SET_CELL', row: aks.row, col: aks.col })
+
+    expect(state.cellStates[key]).toBe('call')
+  })
+
+  it('keeps partial rangeCombos when tagging whole hand fold', () => {
+    let state: AppState = {
+      ...withAksInRange(),
+      rangeCombos: { [key]: ['s', 'd'] },
+      mode: 'fold',
+    }
+    state = rangeReducer(state, { type: 'SET_CELL', row: aks.row, col: aks.col })
+
+    expect(state.cellStates[key]).toBe('fold')
+    expect(state.rangeCombos[key]).toEqual(['s', 'd'])
+
+    const inRange = getCombosInRange(aks, new Set(), state.rangeCombos[key], state.board)
+    expect(inRange).toEqual(['s', 'd'])
+
+    const stats = computeFoldStats(
+      state.cellStates,
+      state.foldedCombos,
+      state.calledCombos,
+      state.rangeCombos,
+      'b50',
+    )
+    expect(stats.folded).toBe(2)
+    expect(stats.total).toBe(2)
+  })
+
+  it('does not fold locked combos when tagging whole hand fold', () => {
+    let state: AppState = {
+      ...withAksInRange(),
+      mode: 'fold',
+      excludedSuits: ['s'],
+    }
+    state = rangeReducer(state, { type: 'SET_CELL', row: aks.row, col: aks.col })
+
+    expect(state.cellStates[key]).toBe('fold')
+    const locked = new Set(state.excludedSuits)
+    expect(getComboDisposition('s', 'fold', new Set(), new Set(), locked)).toBe('in')
+    expect(getComboDisposition('h', 'fold', new Set(), new Set(), locked)).toBe('fold')
+  })
+
+  it('applies inverse action on right-click via SET_CELL inverse', () => {
+    let state: AppState = withAksInRange()
+    state = rangeReducer(state, { type: 'SET_MODE', mode: 'call' })
+    state = rangeReducer(state, { type: 'SET_CELL', row: aks.row, col: aks.col })
+    state = rangeReducer(state, {
+      type: 'SET_CELL',
+      row: aks.row,
+      col: aks.col,
+      inverse: true,
+    })
+
+    expect(state.cellStates[key]).toBe('fold')
   })
 
   it('does not wipe per-combo tags when re-clicking an in-range hand in paint mode', () => {

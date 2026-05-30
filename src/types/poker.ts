@@ -51,7 +51,6 @@ export type HandType = 'pair' | 'suited' | 'offsuit'
 export type CellState = 'out' | 'in' | 'call' | 'fold'
 export type InteractionMode = 'paint' | 'call' | 'fold' | 'selectCombos' | 'erase'
 export type ComboDisposition = 'fold' | 'call' | 'in'
-export type PaintFrequency = 100 | 50 | 25
 
 export interface BoardCard {
   rank: RankIndex
@@ -92,16 +91,6 @@ export const MDF_BETS: MdfBet[] = [
   { label: 'b150', foldPct: 60 },
   { label: 'b200', foldPct: 66 },
 ]
-
-export interface RangeFilters {
-  excludePairs: boolean
-  onlyFlushDraw: boolean
-  onlyStraightDraw: boolean
-  onlyGutshot: boolean
-}
-
-/** @deprecated Use RangeFilters */
-export type SuitFilters = RangeFilters
 
 export interface FoldStats {
   folded: number

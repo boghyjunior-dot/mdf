@@ -1,7 +1,7 @@
 import { Fragment, useEffect } from 'react'
 import { RANKS, cellKey, type RankIndex } from '../types/poker'
 import { ALL_CELLS } from '../lib/matrix'
-import { getCellFilterStatus } from '../lib/filters'
+import { isCellLocked } from '../lib/filters'
 import {
   getCellComboStats,
   getCombosInRange,
@@ -14,6 +14,7 @@ import { MatrixCell } from './MatrixCell'
 
 export function HandMatrix() {
   const { state, dispatch, excludedRankSet, excludedSuitSet } = useRange()
+  const pairsLocked = state.pairsLocked
 
   useEffect(() => {
     const endDrag = () => dispatch({ type: 'SET_DRAGGING', isDragging: false })
@@ -25,38 +26,16 @@ export function HandMatrix() {
     }
   }, [dispatch])
 
-  const handleCell = (row: RankIndex, col: RankIndex) => {
-    const key = cellKey(row, col)
-    const current = state.cellStates[key] ?? 'out'
-    const hasPerCombo = key in state.foldedCombos || key in state.calledCombos
+  const handleCell = (row: RankIndex, col: RankIndex, inverse = false) => {
+    const cell = ALL_CELLS.find((c) => c.row === row && c.col === col)!
+    if (isCellLocked(cell, excludedRankSet, pairsLocked)) return
 
     if (state.mode === 'selectCombos') {
       dispatch({ type: 'SELECT_CELL', row, col })
       return
     }
 
-    if (
-      state.mode === 'paint' &&
-      (current === 'in' || current === 'call' || current === 'fold')
-    ) {
-      dispatch({ type: 'SELECT_CELL', row, col })
-      return
-    }
-
-    if (
-      (state.mode === 'call' || state.mode === 'fold') &&
-      hasPerCombo &&
-      current === 'in'
-    ) {
-      dispatch({ type: 'SELECT_CELL', row, col })
-      return
-    }
-
-    dispatch({ type: 'SET_CELL', row, col })
-  }
-
-  const handleErase = (row: RankIndex, col: RankIndex) => {
-    dispatch({ type: 'ERASE_CELL', row, col })
+    dispatch({ type: 'SET_CELL', row, col, inverse })
   }
 
   const onPointerDown = () => {
@@ -78,14 +57,16 @@ export function HandMatrix() {
         className="inline-grid gap-0.5 sm:gap-1"
         style={{ gridTemplateColumns: 'repeat(14, minmax(28px, 1fr))' }}
       >
-        <div className="w-7 sm:w-8" />
+        <PairsLockHeader
+          locked={pairsLocked}
+          onClick={() => dispatch({ type: 'TOGGLE_PAIRS_LOCK' })}
+        />
 
         {RANKS.map((rank, col) => (
           <RankHeader
             key={`col-${rank}`}
             rank={rank}
-            rankIndex={col as RankIndex}
-            excluded={excludedRankSet.has(col as RankIndex)}
+            locked={excludedRankSet.has(col as RankIndex)}
             onClick={() => dispatch({ type: 'TOGGLE_RANK', rank: col as RankIndex })}
           />
         ))}
@@ -94,21 +75,14 @@ export function HandMatrix() {
           <Fragment key={`row-${rowRank}`}>
             <RankHeader
               rank={rowRank}
-              rankIndex={row as RankIndex}
-              excluded={excludedRankSet.has(row as RankIndex)}
+              locked={excludedRankSet.has(row as RankIndex)}
               onClick={() => dispatch({ type: 'TOGGLE_RANK', rank: row as RankIndex })}
             />
             {RANKS.map((_, col) => {
               const cell = ALL_CELLS.find((c) => c.row === row && c.col === col)!
               const key = cellKey(row as RankIndex, col as RankIndex)
               const cellState = state.cellStates[key] ?? 'out'
-              const filterStatus = getCellFilterStatus(
-                cell,
-                excludedRankSet,
-                state.suitFilters,
-                excludedSuitSet,
-                state.board,
-              )
+              const locked = isCellLocked(cell, excludedRankSet, pairsLocked)
 
               const foldedSet = new Set(state.foldedCombos[key] ?? [])
               const calledSet = new Set(state.calledCombos[key] ?? [])
@@ -122,7 +96,7 @@ export function HandMatrix() {
               const partialRange =
                 cellState !== 'out' &&
                 isPartialPaintRange(cell, excludedSuitSet, state.rangeCombos[key])
-              if (cellState !== 'out' && !filterStatus.excluded) {
+              if (cellState !== 'out') {
                 const stats = getCellComboStats(
                   cell,
                   cellState,
@@ -142,21 +116,21 @@ export function HandMatrix() {
                   key={key}
                   label={cell.label}
                   state={displayState}
-                  excluded={filterStatus.excluded}
-                  partial={filterStatus.partial || partialRange}
+                  locked={locked}
+                  partial={partialRange}
                   selected={isSelected}
                   onPointerDown={() => {
                     onPointerDown()
                     handleCell(row as RankIndex, col as RankIndex)
                   }}
                   onPointerEnter={() => {
-                    if (state.isDragging && state.mode !== 'selectCombos') {
+                    if (state.isDragging && state.mode !== 'selectCombos' && !locked) {
                       handleCell(row as RankIndex, col as RankIndex)
                     }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault()
-                    handleErase(row as RankIndex, col as RankIndex)
+                    handleCell(row as RankIndex, col as RankIndex, true)
                   }}
                 />
               )
@@ -168,27 +142,54 @@ export function HandMatrix() {
   )
 }
 
-function RankHeader({
-  rank,
-  excluded,
+function PairsLockHeader({
+  locked,
   onClick,
 }: {
-  rank: string
-  rankIndex: RankIndex
-  excluded: boolean
+  locked: boolean
   onClick: () => void
 }) {
   return (
     <button
       type="button"
+      title={locked ? 'Unlock pocket pairs for editing' : 'Lock pocket pairs from editing'}
+      onClick={onClick}
+      className={`
+        w-7 sm:w-8 aspect-square
+        flex items-center justify-center
+        text-[10px] sm:text-xs font-bold rounded-sm
+        transition-colors
+        ${locked
+          ? 'bg-amber-900/60 text-amber-200/70 brightness-50 ring-1 ring-amber-600/40'
+          : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}
+      `}
+    >
+      PP
+    </button>
+  )
+}
+
+function RankHeader({
+  rank,
+  locked,
+  onClick,
+}: {
+  rank: string
+  locked: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      title={locked ? 'Unlock rank for editing' : 'Lock rank from editing'}
       onClick={onClick}
       className={`
         w-7 sm:w-8 aspect-square
         flex items-center justify-center
         text-xs sm:text-sm font-bold rounded-sm
         transition-colors
-        ${excluded
-          ? 'bg-red-900 text-red-200 ring-1 ring-red-500'
+        ${locked
+          ? 'bg-amber-900/60 text-amber-200/70 brightness-50 ring-1 ring-amber-600/40'
           : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}
       `}
     >

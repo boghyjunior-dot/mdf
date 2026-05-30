@@ -64,6 +64,15 @@ export function shouldResetStreetDecision(
   return getStreetBoundaryCrossed(prevBoard, newBoard) !== null
 }
 
+/** Clear rank/suit locks when advancing to turn or river (not on flop). */
+export function shouldResetLocks(
+  prevBoard: BoardCard[],
+  newBoard: BoardCard[],
+): boolean {
+  const boundary = getStreetBoundaryCrossed(prevBoard, newBoard)
+  return boundary === 'turn' || boundary === 'river'
+}
+
 /** Returns which street boundary was crossed or changed (flop / turn / river). */
 export function getStreetBoundaryCrossed(
   prevBoard: BoardCard[],

@@ -1,6 +1,7 @@
 import type { ComboDisposition, HandCell, SuitId } from '../types/poker'
 import { RANKS, SUITS } from '../types/poker'
 import { useRange } from '../state/RangeContext'
+import { isCellLocked, isComboLocked } from '../lib/filters'
 import {
   getCellComboStats,
   getComboDisposition,
@@ -18,7 +19,7 @@ const dispositionBorder: Record<ComboDisposition, string> = {
 }
 
 export function ComboPanel() {
-  const { state, dispatch, excludedSuitSet } = useRange()
+  const { state, dispatch, excludedRankSet, excludedSuitSet } = useRange()
 
   if (!state.selectedCell) {
     return (
@@ -51,14 +52,17 @@ export function ComboPanel() {
     cell,
     cellState,
     foldedSet,
-    excludedSuitSet,
+    new Set(),
     calledSet,
     inRangeKeys,
   )
   const derived = getDerivedCellState(stats)
-  const grid = getComboGridLayout(cell, excludedSuitSet)
+  const grid = getComboGridLayout(cell, new Set())
+
+  const cellLocked = isCellLocked(cell, excludedRankSet, state.pairsLocked)
 
   const setDisposition = (comboKey: string, disposition: ComboDisposition) => {
+    if (cellLocked || isComboLocked(comboKey, excludedSuitSet)) return
     dispatch({ type: 'SET_COMBO_DISPOSITION', row, col, comboKey, disposition })
   }
 
@@ -110,7 +114,8 @@ export function ComboPanel() {
               cell={cell}
               comboKey={comboKey}
               inRange={inRangeSet.has(comboKey)}
-              disposition={getComboDisposition(comboKey, cellState, foldedSet, calledSet)}
+              locked={cellLocked || isComboLocked(comboKey, excludedSuitSet)}
+              disposition={getComboDisposition(comboKey, cellState, foldedSet, calledSet, excludedSuitSet)}
               onSetDisposition={setDisposition}
             />
           ) : (
@@ -126,23 +131,35 @@ function ComboCard({
   cell,
   comboKey,
   inRange,
+  locked,
   disposition,
   onSetDisposition,
 }: {
   cell: HandCell
   comboKey: string
   inRange: boolean
+  locked: boolean
   disposition: ComboDisposition
   onSetDisposition: (key: string, d: ComboDisposition) => void
 }) {
+  const outOfRange = !inRange
+
   return (
     <div
       className={`flex flex-col items-center gap-1.5 rounded-md border px-1 py-2 ${
-        inRange ? dispositionBorder[disposition] : 'border-slate-800 bg-slate-900/40 opacity-40'
+        outOfRange
+          ? 'border-slate-800 bg-slate-900/40 opacity-40'
+          : locked
+            ? `${dispositionBorder[disposition]} brightness-50`
+            : dispositionBorder[disposition]
       }`}
     >
-      <ComboLabel cell={cell} comboKey={comboKey} dimmed={!inRange} />
-      {inRange ? (
+      <ComboLabel cell={cell} comboKey={comboKey} dimmed={outOfRange || locked} />
+      {outOfRange ? (
+        <span className="text-[10px] text-slate-500">Out</span>
+      ) : locked ? (
+        <span className="text-[10px] text-amber-400/90">Locked</span>
+      ) : (
         <div className="flex gap-0.5">
           <DispositionButton
             label="F"
@@ -166,8 +183,6 @@ function ComboCard({
             onClick={() => onSetDisposition(comboKey, 'in')}
           />
         </div>
-      ) : (
-        <span className="text-[10px] text-slate-500">Out</span>
       )}
     </div>
   )

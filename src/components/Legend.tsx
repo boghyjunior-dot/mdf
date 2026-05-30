@@ -17,7 +17,7 @@ export function Legend() {
           <span>{item.label}</span>
         </div>
       ))}
-      <span className="text-slate-500">Right-click a cell to erase · Drag to paint</span>
+      <span className="text-slate-500">Right-click inverses the current mode · Drag to paint</span>
     </div>
   )
 }

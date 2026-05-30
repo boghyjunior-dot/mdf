@@ -6,6 +6,7 @@ import { Toolbar } from './components/Toolbar'
 import { HandMatrix } from './components/HandMatrix'
 import { ComboPanel } from './components/ComboPanel'
 import { Legend } from './components/Legend'
+import { MdfTargetDisplay } from './components/MdfTargetDisplay'
 
 function App() {
   return (
@@ -40,9 +41,16 @@ function App() {
               <div className="shrink-0">
                 <HandMatrix />
               </div>
-              <div className="w-full xl:w-auto xl:min-w-[19rem] xl:shrink-0 xl:sticky xl:top-4 border-t xl:border-t-0 xl:border-l border-slate-700 pt-4 xl:pt-0 xl:pl-6">
-                <h2 className="text-sm font-semibold text-slate-300 mb-3">Combo detail</h2>
-                <ComboPanel />
+              <div className="w-full xl:flex-1 xl:min-w-0 xl:sticky xl:top-4 border-t xl:border-t-0 xl:border-l border-slate-700 pt-4 xl:pt-0 xl:pl-6">
+                <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start">
+                  <div className="flex-1 min-w-0 w-full">
+                    <h2 className="text-sm font-semibold text-slate-300 mb-3">Combo detail</h2>
+                    <ComboPanel />
+                  </div>
+                  <div className="shrink-0 sm:ml-auto w-full sm:w-auto">
+                    <MdfTargetDisplay compact />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-slate-800">

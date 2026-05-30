@@ -1,5 +1,6 @@
 import { RANKS, SUITS, cellKey, type BoardCard, type CellState, type ComboDisposition, type HandCell, type SuitId } from '../types/poker'
 import { isComboBlockedByBoard } from './board'
+import { isComboLocked } from './filters'
 import { ALL_CELLS } from './matrix'
 
 export const SUIT_IDS = SUITS.map((s) => s.id) as SuitId[]
@@ -147,26 +148,32 @@ export function getOrderedEligibleCombos(
     .filter((key): key is string => key !== null)
 }
 
-export function getCombosForPaintFrequency(
-  cell: HandCell,
-  excludedSuits: Set<SuitId>,
-  frequency: import('../types/poker').PaintFrequency,
-): string[] {
-  const ordered = getOrderedEligibleCombos(cell, excludedSuits)
-  if (frequency >= 100 || ordered.length === 0) return ordered
-  const count = Math.max(1, Math.round((ordered.length * frequency) / 100))
-  return ordered.slice(0, count)
-}
-
 export function getCombosInRange(
   cell: HandCell,
-  excludedSuits: Set<SuitId>,
+  lockedSuits: Set<SuitId>,
   rangeCombos: string[] | undefined,
   board: BoardCard[] = [],
 ): string[] {
-  const eligible = getOrderedEligibleCombos(cell, excludedSuits)
-  const inRange = rangeCombos ? rangeCombos.filter((key) => eligible.includes(key)) : eligible
-  return inRange.filter((key) => !isComboBlockedByBoard(cell, key, board))
+  const allKeys = getCellComboKeys(cell)
+
+  const inRange = rangeCombos
+    ? rangeCombos.filter((key) => allKeys.includes(key))
+    : allKeys
+
+  return inRange.filter(
+    (key) => isComboLocked(key, lockedSuits) || !isComboBlockedByBoard(cell, key, board),
+  )
+}
+
+/** All combos that could remain in range (locked combos ignore board blocks). */
+export function getMaxCombosInRange(
+  cell: HandCell,
+  lockedSuits: Set<SuitId>,
+  board: BoardCard[] = [],
+): string[] {
+  return getCellComboKeys(cell).filter(
+    (key) => isComboLocked(key, lockedSuits) || !isComboBlockedByBoard(cell, key, board),
+  )
 }
 
 export function isPartialPaintRange(
@@ -184,14 +191,21 @@ export function getComboDisposition(
   cellState: 'in' | 'call' | 'fold',
   foldedComboKeys: Set<string>,
   calledComboKeys: Set<string>,
+  lockedSuits: Set<SuitId> = new Set(),
 ): ComboDisposition {
   if (foldedComboKeys.has(comboKey)) return 'fold'
   if (calledComboKeys.has(comboKey)) return 'call'
 
   const hasPerCombo = foldedComboKeys.size > 0 || calledComboKeys.size > 0
   if (!hasPerCombo) {
-    if (cellState === 'fold') return 'fold'
-    if (cellState === 'call') return 'call'
+    if (cellState === 'fold') {
+      if (isComboLocked(comboKey, lockedSuits)) return 'in'
+      return 'fold'
+    }
+    if (cellState === 'call') {
+      if (isComboLocked(comboKey, lockedSuits)) return 'in'
+      return 'call'
+    }
   }
 
   return 'in'
@@ -202,8 +216,9 @@ export function isComboFolded(
   cellState: 'in' | 'call' | 'fold',
   foldedComboKeys: Set<string>,
   calledComboKeys: Set<string> = new Set(),
+  lockedSuits: Set<SuitId> = new Set(),
 ): boolean {
-  return getComboDisposition(comboKey, cellState, foldedComboKeys, calledComboKeys) === 'fold'
+  return getComboDisposition(comboKey, cellState, foldedComboKeys, calledComboKeys, lockedSuits) === 'fold'
 }
 
 export function isComboDefended(
@@ -211,8 +226,9 @@ export function isComboDefended(
   cellState: 'in' | 'call' | 'fold',
   foldedComboKeys: Set<string>,
   calledComboKeys: Set<string> = new Set(),
+  lockedSuits: Set<SuitId> = new Set(),
 ): boolean {
-  return getComboDisposition(comboKey, cellState, foldedComboKeys, calledComboKeys) === 'call'
+  return getComboDisposition(comboKey, cellState, foldedComboKeys, calledComboKeys, lockedSuits) === 'call'
 }
 
 export function getExpandedComboSets(
@@ -220,14 +236,16 @@ export function getExpandedComboSets(
   foldedComboKeys: Set<string>,
   calledComboKeys: Set<string>,
   eligible: string[],
+  lockedSuits: Set<SuitId> = new Set(),
 ): { folded: Set<string>; called: Set<string> } {
   const hasPerCombo = foldedComboKeys.size > 0 || calledComboKeys.size > 0
+  const unlocked = eligible.filter((key) => !isComboLocked(key, lockedSuits))
 
   if (!hasPerCombo && cellState === 'fold') {
-    return { folded: new Set(eligible), called: new Set() }
+    return { folded: new Set(unlocked), called: new Set() }
   }
   if (!hasPerCombo && cellState === 'call') {
-    return { folded: new Set(), called: new Set(eligible) }
+    return { folded: new Set(), called: new Set(unlocked) }
   }
 
   return {
@@ -247,6 +265,7 @@ export function expandWholeCellFolds(
     foldedComboKeys,
     new Set(),
     getEligibleCellComboKeys(cell, excludedSuits),
+    excludedSuits,
   ).folded
 }
 
@@ -271,7 +290,7 @@ export function getCellComboStats(
   let untagged = 0
 
   for (const key of eligible) {
-    const disposition = getComboDisposition(key, cellState, foldedComboKeys, calledComboKeys)
+    const disposition = getComboDisposition(key, cellState, foldedComboKeys, calledComboKeys, excludedSuits)
     if (disposition === 'fold') folded++
     else if (disposition === 'call') defended++
     else untagged++
@@ -352,15 +371,16 @@ export function pruneFoldedCombosFromRange(
 
     const remaining = inRange.filter(
       (comboKey) =>
-        getComboDisposition(comboKey, cellState, foldedSet, calledSet) !== 'fold',
+        isComboLocked(comboKey, excludedSuits) ||
+        getComboDisposition(comboKey, cellState, foldedSet, calledSet, excludedSuits) !== 'fold',
     )
 
     if (remaining.length === 0) continue
 
     nextCellStates[key] = 'in'
 
-    const fullEligible = getCombosInRange(cell, excludedSuits, undefined, board)
-    if (remaining.length < fullEligible.length) {
+    const maxInRange = getMaxCombosInRange(cell, excludedSuits, board)
+    if (remaining.length < maxInRange.length) {
       nextRangeCombos[key] = remaining
     }
   }
